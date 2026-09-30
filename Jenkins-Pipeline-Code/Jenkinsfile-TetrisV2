@@ -1,116 +1,379 @@
 pipeline {
+
     agent any
+
     tools {
         nodejs 'nodejs'
     }
-    environment  {
-        SCANNER_HOME=tool 'sonar-scanner'
+
+    environment {
+        SCANNER_HOME = tool 'sonar-scanner'
     }
+
     stages {
+
         stage('Cleaning Workspace') {
             steps {
                 cleanWs()
             }
         }
+
         stage('Checkout from Git') {
             steps {
-                git branch: 'master', url: 'https://github.com/iampratik11/Argocd_Kubernetes_DevSecops.git'
+                git(
+                    branch: 'main',
+                    url: 'https://github.com/iampratik11/Argocd_Kubernetes_DevSecops.git'
+                )
             }
         }
+
         stage('Sonarqube Analysis') {
             steps {
+
                 dir('Tetris-V2') {
-                    withSonarQubeEnv('sonar-server') {
-                        sh ''' $SCANNER_HOME/bin/sonar-scanner -Dsonar.projectName=Tetris \
-                        -Dsonar.projectKey=Tetris '''
-                    }
-                }
-            }
-        }
-        stage('Quality Check') {
-            steps {
-                script {
-                    waitForQualityGate abortPipeline: false, credentialsId: 'sonar-token'
-                }
-            }
-        }
-        stage('Installing Dependencies') {
-            steps {
-                dir('Tetris-V2') {
-                    sh 'npm install'
-                }
-            }
-        }
-        stage('OWASP Dependency-Check Scan') {
-            steps {
-                dir('Tetris-V2') {
-                    dependencyCheck additionalArguments: '--scan ./ --disableYarnAudit --disableNodeAudit', odcInstallation: 'DP-Check'
-                    dependencyCheckPublisher pattern: '**/dependency-check-report.xml'
-                }
-            }
-        }
-        stage('Trivy File Scan') {
-            steps {
-                dir('Tetris-V2') {
-                    sh 'trivy fs . > trivyfs.txt'
-                }
-            }
-        }
-        stage("Docker Image Build") {
-            steps {
-                script {
-                    dir('Tetris-V2') {
-                        withDockerRegistry(credentialsId: 'docker', toolName: 'docker') {
-                            sh 'docker system prune -f'
-                            sh 'docker build -t tetrisv1 .'
-                        }
-                    }
-                }
-            }
-        }
-        stage("Docker Image Pushing") {
-            steps {
-                script {
-                    withDockerRegistry(credentialsId: 'docker', toolName: 'docker') {
-                        sh 'docker tag tetrisv1 avian19/tetrisv1:${BUILD_NUMBER}'
-                        sh 'docker push avian19/tetrisv1:${BUILD_NUMBER}'
-                    }
-                }
-            }
-        }
-        stage("TRIVY Image Scan") {
-            steps {
-                sh 'trivy image avian19/tetrisv1:${BUILD_NUMBER} > trivyimage.txt'
-            }
-        }
-        stage('Checkout Code') {
-            steps {
-                git branch: 'master', url: 'https://github.com/iampratik11/Argocd_Kubernetes_DevSecops.git'
-            }
-        }
-        stage('Update Deployment file') {
-            environment {
-                GIT_REPO_NAME = "Argocd_Kubernetes_DevSecops"
-                GIT_USER_NAME = "iampratik11"
-            }
-            steps {
-                dir('Manifest-file') {
-                    withCredentials([string(credentialsId: 'github', variable: 'GITHUB_TOKEN')]) {
+
+                    withSonarQubeEnv('sonar-scanner') {
+
                         sh '''
-                            git config user.email "waghpratik777@gmail.com"
-                            git config user.name "iampratik11"
-                            BUILD_NUMBER=${BUILD_NUMBER}
-                            echo $BUILD_NUMBER
-                            imageTag=$(grep -oP '(?<=tetrisv1:)[^ ]+' deployment-service.yml)
-                            echo $imageTag
-                            sed -i "s/tetrisv1:${imageTag}/tetrisv1:${BUILD_NUMBER}/" deployment-service.yml
-                            git add deployment-service.yml
-                            git commit -m "Update deployment Image to version \${BUILD_NUMBER}"
-                            git push https://${GITHUB_TOKEN}@github.com/${GIT_USER_NAME}/${GIT_REPO_NAME} HEAD:master
+                            echo "========================================"
+                            echo "Running SonarQube Analysis"
+                            echo "========================================"
+
+                            $SCANNER_HOME/bin/sonar-scanner \
+                                -Dsonar.projectName=Tetris-V2 \
+                                -Dsonar.projectKey=Tetris-V2
+
+                            echo "SonarQube analysis completed."
                         '''
                     }
                 }
             }
+        }
+
+        stage('Quality Check') {
+            steps {
+
+                script {
+
+                    waitForQualityGate(
+                        abortPipeline: false,
+                        credentialsId: 'sonar-token'
+                    )
+                }
+            }
+        }
+
+        stage('Installing Dependencies') {
+            steps {
+
+                dir('Tetris-V2') {
+
+                    sh '''
+                        echo "========================================"
+                        echo "Node version:"
+                        node --version
+
+                        echo "NPM version:"
+                        npm --version
+
+                        echo "========================================"
+                        echo "Installing dependencies..."
+                        echo "========================================"
+
+                        npm install
+
+                        echo "Dependencies installed successfully."
+                    '''
+                }
+            }
+        }
+
+        stage('Trivy File Scan') {
+            steps {
+
+                dir('Tetris-V2') {
+
+                    sh '''
+                        echo "========================================"
+                        echo "Running Trivy filesystem scan..."
+                        echo "========================================"
+
+                        trivy fs . > trivyfs.txt
+
+                        echo "Trivy filesystem scan completed."
+                    '''
+                }
+            }
+        }
+
+        stage('Docker Image Build') {
+            steps {
+
+                dir('Tetris-V2') {
+
+                    sh '''
+                        echo "========================================"
+                        echo "Docker executable:"
+                        which docker
+
+                        echo "Docker version:"
+                        docker --version
+
+                        echo "========================================"
+                        echo "Building Tetris V2 Docker image..."
+                        echo "========================================"
+
+                        docker build \
+                            -t tetrisv2 .
+
+                        echo "========================================"
+                        echo "Docker image built successfully."
+                        echo "========================================"
+
+                        docker images | grep tetrisv2 || true
+                    '''
+                }
+            }
+        }
+
+        stage('Docker Image Pushing') {
+            steps {
+
+                script {
+
+                    withDockerRegistry(
+                        credentialsId: 'docker'
+                    ) {
+
+                        sh '''
+                            echo "========================================"
+                            echo "Docker executable:"
+                            which docker
+
+                            echo "Docker version:"
+                            docker --version
+
+                            echo "========================================"
+                            echo "Tagging Tetris V2 image..."
+                            echo "========================================"
+
+                            docker tag \
+                                tetrisv2 \
+                                pratikwagh99/tetrisv2:${BUILD_NUMBER}
+
+                            echo "========================================"
+                            echo "Pushing Docker image..."
+                            echo "========================================"
+
+                            docker push \
+                                pratikwagh99/tetrisv2:${BUILD_NUMBER}
+
+                            echo "========================================"
+                            echo "Docker image pushed successfully."
+                            echo "========================================"
+
+                            echo "Image:"
+                            echo "pratikwagh99/tetrisv2:${BUILD_NUMBER}"
+                        '''
+                    }
+                }
+            }
+        }
+
+        stage('TRIVY Image Scan') {
+            steps {
+
+                sh '''
+                    echo "========================================"
+                    echo "Running Trivy image scan..."
+                    echo "========================================"
+
+                    trivy image \
+                        pratikwagh99/tetrisv2:${BUILD_NUMBER} \
+                        > Tetris-V2/trivyimage.txt
+
+                    echo "Trivy image scan completed."
+                '''
+            }
+        }
+
+        stage('Checkout Manifest Repository') {
+            steps {
+
+                dir('Manifest-file') {
+
+                    deleteDir()
+
+                    git(
+                        branch: 'main',
+                        url: 'https://github.com/iampratik11/Argocd_Kubernetes_DevSecops.git'
+                    )
+                }
+            }
+        }
+
+        stage('Update Deployment File') {
+
+            environment {
+
+                GIT_REPO_NAME = 'Argocd_Kubernetes_DevSecops'
+                GIT_USER_NAME = 'iampratik11'
+            }
+
+            steps {
+
+                dir('Manifest-file') {
+
+                    withCredentials([
+                        string(
+                            credentialsId: 'github',
+                            variable: 'GITHUB_TOKEN'
+                        )
+                    ]) {
+
+                        sh '''
+                            set -e
+
+                            echo "========================================"
+                            echo "Updating Kubernetes Deployment"
+                            echo "========================================"
+
+                            echo "Current directory:"
+                            pwd
+
+                            echo "========================================"
+                            echo "Repository Structure"
+                            echo "========================================"
+
+                            ls -la
+
+                            echo "========================================"
+                            echo "Checking Manifest File"
+                            echo "========================================"
+
+                            DEPLOYMENT_FILE="Manifest-file/deployment-service.yml"
+
+                            if [ ! -f "$DEPLOYMENT_FILE" ]; then
+
+                                echo "ERROR: Deployment file not found:"
+                                echo "$DEPLOYMENT_FILE"
+
+                                exit 1
+
+                            fi
+
+                            echo "Deployment file found:"
+                            echo "$DEPLOYMENT_FILE"
+
+                            echo "========================================"
+                            echo "Current Image"
+                            echo "========================================"
+
+                            grep -n "image:" "$DEPLOYMENT_FILE" || true
+
+                            echo "========================================"
+                            echo "Build Information"
+                            echo "========================================"
+
+                            echo "Build Number:"
+                            echo "${BUILD_NUMBER}"
+
+                            echo "New Docker Image:"
+                            echo "pratikwagh99/tetrisv2:${BUILD_NUMBER}"
+
+                            echo "========================================"
+                            echo "Git Configuration"
+                            echo "========================================"
+
+                            git config user.email "waghpratik777@gmail.com"
+                            git config user.name "iampratik11"
+
+                            echo "========================================"
+                            echo "Updating Kubernetes Image"
+                            echo "========================================"
+
+                            sed -i \
+                                -E "s|(image:)[[:space:]]+[^[:space:]]+|\\1 pratikwagh99/tetrisv2:${BUILD_NUMBER}|" \
+                                "$DEPLOYMENT_FILE"
+
+                            echo "========================================"
+                            echo "Updated Image"
+                            echo "========================================"
+
+                            grep -n "image:" "$DEPLOYMENT_FILE"
+
+                            echo "========================================"
+                            echo "Git Status"
+                            echo "========================================"
+
+                            git status
+
+                            echo "========================================"
+                            echo "Adding Deployment File"
+                            echo "========================================"
+
+                            git add "$DEPLOYMENT_FILE"
+
+                            if git diff --cached --quiet; then
+
+                                echo "No changes detected."
+
+                            else
+
+                                echo "========================================"
+                                echo "Creating Git Commit"
+                                echo "========================================"
+
+                                git commit \
+                                    -m "Update Tetris V2 deployment Image to version ${BUILD_NUMBER}"
+
+                                echo "========================================"
+                                echo "Pushing Changes to GitHub"
+                                echo "========================================"
+
+                                git push \
+                                    https://${GITHUB_TOKEN}@github.com/${GIT_USER_NAME}/${GIT_REPO_NAME}.git \
+                                    HEAD:main
+
+                                echo "========================================"
+                                echo "Manifest repository updated successfully."
+                                echo "========================================"
+
+                            fi
+                        '''
+                    }
+                }
+            }
+        }
+    }
+
+    post {
+
+        always {
+
+            echo '========================================'
+            echo 'Pipeline completed'
+            echo '========================================'
+
+            archiveArtifacts(
+                artifacts: 'Tetris-V2/trivyfs.txt,Tetris-V2/trivyimage.txt',
+                allowEmptyArchive: true
+            )
+        }
+
+        success {
+
+            echo '========================================'
+            echo 'PIPELINE SUCCESS'
+            echo '========================================'
+        }
+
+        failure {
+
+            echo '========================================'
+            echo 'PIPELINE FAILED'
+            echo 'Check the failed stage above.'
+            echo '========================================'
         }
     }
 }
