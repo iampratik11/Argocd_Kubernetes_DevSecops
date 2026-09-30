@@ -264,7 +264,7 @@ pipeline {
                             echo "Current Image"
                             echo "========================================"
 
-                            grep -n "image:" "$DEPLOYMENT_FILE" || true
+                            grep -n "image:" "$DEPLOYMENT_FILE"
 
                             echo "========================================"
                             echo "Build Information"
@@ -288,7 +288,7 @@ pipeline {
                             echo "========================================"
 
                             sed -i \
-                                -E "s|(image:.*pratikwagh99/tetrisv1:)[^[:space:]]+|\\1${BUILD_NUMBER}|" \
+                                -E "s|(image:)[[:space:]]+[^[:space:]]+|\\1 pratikwagh99/tetrisv1:${BUILD_NUMBER}|" \
                                 "$DEPLOYMENT_FILE"
 
                             echo "========================================"
